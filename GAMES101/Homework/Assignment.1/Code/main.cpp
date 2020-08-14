@@ -26,9 +26,38 @@ Eigen::Matrix4f get_model_matrix(float rotation_angle)
     // TODO: Implement this function
     // Create the model matrix for rotating the triangle around the Z axis.
     // Then return it.
+    // Rotation2Df rot(rotation_angle);
+    Eigen::Matrix2f rot;
+    float rad = rotation_angle * MY_PI / 180;
+    rot << cos(rad), -sin(rad),  
+           sin(rad), cos(rad);
+           
+    // model.block<2, 2>(0, 0) = rot.toRotationMatrix();
+    model.block<2, 2>(0, 0) = rot;
 
     return model;
 }
+
+Eigen::Matrix4f get_orthogonality_matrix(float xLeft, float xRight, float yTop,
+                                         float yBottom, float zNear, float zFar)
+{
+    Eigen::Matrix4f ortho = Eigen::Matrix4f::Identity();
+
+    Eigen::Matrix4f scale = Eigen::Matrix4f::Identity();
+    Eigen::Matrix4f trans = Eigen::Matrix4f::Identity();
+
+    scale << 2 / (xRight - xLeft), 0,                    0,                  0,
+             0,                    2 / (yTop - yBottom), 0,                  0,
+             0,                    0,                    2 / (zNear - zFar), 0,
+             0,                    0,                    0,                  1;
+    trans << 1, 0, 0, -(xLeft + xRight) / 2,
+             0, 1, 0, -(yTop + yBottom) / 2,
+             0, 0, 1, -(zNear + zFar) / 2,
+             0, 0, 0, 1;
+    ortho = scale * trans;
+
+    return ortho;
+}                                         
 
 Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
                                       float zNear, float zFar)
@@ -40,6 +69,21 @@ Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
     // TODO: Implement this function
     // Create the projection matrix for the given parameters.
     // Then return it.
+    zNear = zNear > 0 ? -zNear : zNear;
+    float yTop = tanf(eye_fov / 2)* abs(zNear);
+    float yBottom = -yTop;
+
+    float xRight = aspect_ratio * yTop;
+    float xLeft = -xRight;
+
+    projection(0, 0) = zNear;
+    projection(1, 1) = zNear;
+    projection(2, 2) = zNear + zFar;
+    projection(2, 3) = -zNear * zFar;
+    projection(3, 2) = 1;
+    projection(3, 3) = 0;
+
+    projection =  get_orthogonality_matrix(xLeft, xRight, yTop, yBottom, zNear, zFar) * projection;
 
     return projection;
 }
