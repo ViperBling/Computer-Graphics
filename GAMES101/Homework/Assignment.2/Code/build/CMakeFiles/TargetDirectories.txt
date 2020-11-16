@@ -1,3 +1,5 @@
-/home/zero/Program/Games101/Assignment.2/Code/build/CMakeFiles/rebuild_cache.dir
-/home/zero/Program/Games101/Assignment.2/Code/build/CMakeFiles/edit_cache.dir
-/home/zero/Program/Games101/Assignment.2/Code/build/CMakeFiles/Rasterizer.dir
+/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/build/CMakeFiles/rebuild_cache.dir
+/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/build/CMakeFiles/edit_cache.dir
+/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/build/CMakeFiles/package_source.dir
+/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/build/CMakeFiles/package.dir
+/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/build/CMakeFiles/Rasterizer.dir

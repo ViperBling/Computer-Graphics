@@ -1,3 +1,10 @@
+/*
+ * @Author: Zero
+ * @Date: 2020-03-03 13:04:04
+ * @LastEditTime: 2020-10-14 14:23:53
+ * @Description: 
+ * @可以输入预定的版权声明、个性签名、空行等
+ */
 //
 // Created by LEI XU on 4/11/19.
 //
@@ -6,7 +13,6 @@
 #define RASTERIZER_TRIANGLE_H
 
 #include <eigen3/Eigen/Eigen>
-
 
 using namespace Eigen;
 class Triangle{

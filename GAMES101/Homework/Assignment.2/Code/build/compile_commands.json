@@ -1,17 +1,17 @@
 [
 {
-  "directory": "/home/zero/Program/Games101/Assignment.2/Code/build",
-  "command": "/usr/bin/g++   -isystem /usr/include/opencv4  -g   -std=gnu++17 -o CMakeFiles/Rasterizer.dir/main.cpp.o -c /home/zero/Program/Games101/Assignment.2/Code/main.cpp",
-  "file": "/home/zero/Program/Games101/Assignment.2/Code/main.cpp"
+  "directory": "/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/build",
+  "command": "/usr/bin/clang++ -I/usr/local/include -isystem /usr/local/Cellar/opencv/4.4.0_2/include/opencv4 -g -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX10.15.sdk -std=gnu++17 -o CMakeFiles/Rasterizer.dir/main.cpp.o -c /Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/main.cpp",
+  "file": "/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/main.cpp"
 },
 {
-  "directory": "/home/zero/Program/Games101/Assignment.2/Code/build",
-  "command": "/usr/bin/g++   -isystem /usr/include/opencv4  -g   -std=gnu++17 -o CMakeFiles/Rasterizer.dir/rasterizer.cpp.o -c /home/zero/Program/Games101/Assignment.2/Code/rasterizer.cpp",
-  "file": "/home/zero/Program/Games101/Assignment.2/Code/rasterizer.cpp"
+  "directory": "/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/build",
+  "command": "/usr/bin/clang++ -I/usr/local/include -isystem /usr/local/Cellar/opencv/4.4.0_2/include/opencv4 -g -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX10.15.sdk -std=gnu++17 -o CMakeFiles/Rasterizer.dir/rasterizer.cpp.o -c /Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/rasterizer.cpp",
+  "file": "/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/rasterizer.cpp"
 },
 {
-  "directory": "/home/zero/Program/Games101/Assignment.2/Code/build",
-  "command": "/usr/bin/g++   -isystem /usr/include/opencv4  -g   -std=gnu++17 -o CMakeFiles/Rasterizer.dir/Triangle.cpp.o -c /home/zero/Program/Games101/Assignment.2/Code/Triangle.cpp",
-  "file": "/home/zero/Program/Games101/Assignment.2/Code/Triangle.cpp"
+  "directory": "/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/build",
+  "command": "/usr/bin/clang++ -I/usr/local/include -isystem /usr/local/Cellar/opencv/4.4.0_2/include/opencv4 -g -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX10.15.sdk -std=gnu++17 -o CMakeFiles/Rasterizer.dir/Triangle.cpp.o -c /Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/Triangle.cpp",
+  "file": "/Users/zero/Program/ComputerGraphics/Computer-Graphics/GAMES101/Homework/Assignment.2/Code/Triangle.cpp"
 }
 ]

@@ -575,6 +575,10 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
 
 然后是使用MSAA反走样。将一个像素分割成4个小像素，用这4个小像素颜色的均值来决定像素的颜色。当小像素落入三角形内部的数量越多，像素的颜色就越明显，否则越暗淡。
 
+# Assignment03. Blinn-Phong模型和纹理映射
+
+
+
 
 
 
