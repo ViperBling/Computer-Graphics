@@ -900,3 +900,71 @@ Displacement Mapping：
 
 ![outDis](record.assets/outDis.png)
 
+修改`main.cpp`中模型的位置可以加载提供的不同模型，只不过有些模型没有提供材质贴图。
+
+## 6. 双线性纹理插值
+
+要求在`Texture`类中实现一个新方法`Vector3f getColorBilinear(float u, float v)`并通过`fragment_shader`调用。应该采用更小的纹理图以便更好的显示。
+
+给定纹理坐标值$(u_{img}, v_{img})$，取其临近的4个texel，计算其距离左下角texel的距离$(s,t)$，然后首先进行横向插值
+
+![image-20201126152519244](record.assets/image-20201126152519244.png)
+$$
+u_0 = lerp(s, u_{00}, u_{10}) \\
+u_1 = lerp(s, u_{10}, u_{11})
+$$
+这样插值得到了红点处纵向的两个值，然后进行纵向的插值：
+$$
+f(x,y) = lerp(t, u_0, u_1)
+$$
+得到对应点的纹理值。代码如下：
+
+```c++
+Eigen::Vector3f getColorBilinear(float u, float v)
+{
+    u = u < 0 ? 0 : u;
+    u = u > 1 ? 1 : u;
+    v = v < 0 ? 0 : v;
+    v = v > 1 ? 1 : v;
+    auto u_img = u * width;
+    auto v_img = (1 - v) * height;
+
+    // 相当于取一个在u，v处的boundingbox，边界是当前位置的临近4个像素
+    auto u_min = std::floor(u_img);
+    auto u_max = std::min((float)width, std::ceil(u_img));
+    auto v_min = std::floor(v_img);
+    auto v_max = std::min((float)height, std::ceil(v_img));
+
+    // 四个临近像素的颜色值，然后进行插值操作
+    // opencv中的v方向和贴图中的v方向是反的，v_min实际上在v_max上面
+    auto u_00 = image_data.at<cv::Vec3b>(v_max, u_min);
+    auto u_10 = image_data.at<cv::Vec3b>(v_max, u_max);
+    auto u_01 = image_data.at<cv::Vec3b>(v_min, u_min);
+    auto u_11 = image_data.at<cv::Vec3n>(v_min, u_max);
+
+    // 待插值像素在bbx中的位置，也就是插值的比例
+    float s = (u_img - u_min) / (u_max - u_min);
+    float t = (v_img - v_max) / (v_min - v_max);	// 这里是v_min-v_max
+
+    auto u_0 = (1 - s) * u_00 + s * u_10;
+    auto u_1 = (1 - s) * u_01 + s * u_11;
+
+    auto F = (1 - t) * u_0 + t * u_1;
+
+    return Eigen::Vector3f(F[0], F[1], F[2]);
+}
+```
+
+将纹理下采样到100x100，然后对比结果：
+
+![outTexture1](record.assets/outTexture1.png)
+
+![outTextureB](record.assets/outTextureB.png)
+
+300x300的对比结果：
+
+![outTexture3](record.assets/outTexture3-6378077.png)
+
+![outTextureB](record.assets/outTextureB-6378164.png)
+
+可以看到结果还是挺明显的。
