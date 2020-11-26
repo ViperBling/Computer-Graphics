@@ -124,21 +124,25 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
 
     // TODO : Find out the bounding box of current triangle.
     // iterate through the pixel and find if the current pixel is inside the triangle
-    std::array<float, 4> bbx{0, 0, 0, 0}; // {x1, y1, x2, y2}
+    // std::array<float, 4> bbx{0, 0, 0, 0}; // {x1, y1, x2, y2}
 
-    for (auto point : v) {
-        bbx[0] = bbx[0] < point.x() ? bbx[0] : point.x();
-        bbx[1] = bbx[1] < point.y() ? bbx[1] : point.y();
-        bbx[2] = bbx[2] > point.x() ? bbx[2] : point.x();
-        bbx[3] = bbx[3] > point.y() ? bbx[3] : point.y();
-    }
+    float min_x = std::min(v[0][0], std::min(v[1][0], v[2][0]));
+    float max_x = std::max(v[0][0], std::max(v[1][0], v[2][0]));
+    float min_y = std::min(v[0][1], std::min(v[1][1], v[2][1]));
+    float max_y = std::max(v[0][1], std::max(v[1][1], v[2][1]));
+
+    int x_min = std::floor(min_x);
+    int x_max = std::ceil(max_x);
+    int y_min = std::floor(min_y);
+    int y_max = std::ceil(max_y);
+
 
     bool msaa = true;
 
     if (msaa) {
-        auto steps = {0.25f, 0.75f};
-        for (int x = std::floor(bbx[0]); x < std::ceil(bbx[2]); ++x) {
-            for (int y = std::floor(bbx[1]); y < std::ceil(bbx[3]); ++y) {
+        auto steps = {0.125f, 0.375f, 0.625f, 0.875f};
+        for (int x = x_min; x <= x_max; ++x) {
+            for (int y = y_min; y <= y_max; ++y) {
                 
                 Vector3f point = {x, y, 1.f};
                 int count = 0;
@@ -159,13 +163,12 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
                         }
                     }
                 }
-
                 if (count) {
                     int idx = get_index(x, y);
                     if (-min_depth < depth_buf[idx]) {
                         depth_buf[idx] = -min_depth;
                         // TODO : set the current pixel (use the set_pixel function) to the color of the triangle (use getColor function) if it should be painted.
-                        set_pixel(point, count * t.getColor() / 4.0);
+                        set_pixel(Vector3f(x, y, min_depth), count * t.getColor() / 16.0);
                     }   
                 }
 
@@ -173,8 +176,8 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
             }
         }
     } else {
-        for (int x = std::floor(bbx[0]); x < std::ceil(bbx[2]); ++x) {
-            for (int y = std::floor(bbx[1]); y < std::ceil(bbx[3]); ++y) {
+        for (int x = x_min; x <= x_max; ++x) {
+            for (int y = y_min; y <= y_max; ++y) {
                 if (insideTriangle(x + 0.5, y + 0.5, t.v)) {
                     Vector3f point = {x, y, 1.f};
 

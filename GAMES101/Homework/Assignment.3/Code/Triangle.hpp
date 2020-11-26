@@ -1,3 +1,10 @@
+/*
+ * @Author: Zero
+ * @Date: 2020-11-16 16:25:28
+ * @LastEditTime: 2020-11-18 17:29:39
+ * @Description: 
+ * @可以输入预定的版权声明、个性签名、空行等
+ */
 //
 // Created by LEI XU on 4/11/19.
 //
@@ -14,9 +21,9 @@ class Triangle{
 public:
     Vector4f v[3]; /*the original coordinates of the triangle, v0, v1, v2 in counter clockwise order*/
     /*Per vertex values*/
-    Vector3f color[3]; //color at each vertex;
-    Vector2f tex_coords[3]; //texture u,v
-    Vector3f normal[3]; //normal vector for each vertex
+    Vector3f color[3];              //color at each vertex;
+    Vector2f tex_coords[3];         //texture u,v
+    Vector3f normal[3];             //normal vector for each vertex
 
     Texture *tex= nullptr;
     Triangle();

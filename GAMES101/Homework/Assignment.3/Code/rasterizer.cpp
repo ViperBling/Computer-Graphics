@@ -280,6 +280,121 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
     // Use: Instead of passing the triangle's color directly to the frame buffer, pass the color to the shaders first to get the final color;
     // Use: auto pixel_color = fragment_shader(payload);
 
+    auto v = t.toVector4();
+
+    std::array<float, 4> bbx{0, 0, 0, 0};       // {x1, y1, x2, y2}
+
+    // for (auto point : v) {
+    //     bbx[0] = bbx[0] < point.x() ? bbx[0] : point.x();
+    //     bbx[1] = bbx[1] < point.y() ? bbx[1] : point.y();
+    //     bbx[2] = bbx[2] > point.x() ? bbx[2] : point.x();
+    //     bbx[3] = bbx[3] > point.y() ? bbx[3] : point.y();
+    // }
+
+    // int x_min = std::floor(bbx[0]);
+    // int x_max = std::ceil(bbx[2]);
+    // int y_min = std::floor(bbx[1]);
+    // int y_max = std::ceil(bbx[3]);
+
+    float min_x = std::min(v[0][0], std::min(v[1][0], v[2][0]));
+    float max_x = std::max(v[0][0], std::max(v[1][0], v[2][0]));
+    float min_y = std::min(v[0][1], std::min(v[1][1], v[2][1]));
+    float max_y = std::max(v[0][1], std::max(v[1][1], v[2][1]));
+
+    int x_min = std::floor(min_x);
+    int x_max = std::ceil(max_x);
+    int y_min = std::floor(min_y);
+    int y_max = std::ceil(max_y);
+
+    bool msaa = false;
+    if (msaa) {
+        auto steps = {0.125f, 0.375f, 0.625f, 0.875f};
+        for (int x = x_min; x <= x_max; ++x) {
+            for (int y = y_min; y <= y_max; ++y) {
+
+                int count = 0;                  // 子像素落入三角形内部的数量
+                float min_depth = FLT_MAX;
+
+                auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
+
+                for (auto delta_x : steps) {
+                    for (auto delta_y : steps) {
+                        float subx = x + delta_x;       // 子像素分割
+                        float suby = y + delta_y;
+                        if (insideTriangle(subx, suby, t.v)) {
+                            count++;
+                            // If so, use the following code to get the interpolated z value.
+                            // 计算三角形重心坐标
+                            
+                            // v.w()是齐次坐标值
+                            float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                            float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                            // 得到深度值
+                            z_interpolated *= w_reciprocal;
+                            min_depth = std::min(min_depth, z_interpolated);
+                        }
+                    }
+                }
+
+                if (count) {
+                    int idx = get_index(x, y);
+                    if (-min_depth < depth_buf[idx]) {
+                        // Color
+                        auto interpolated_color = interpolate(alpha, beta, gamma, t.color[0], t.color[1], t.color[2], 1);
+                        // Normal
+                        auto interpolated_normal = interpolate(alpha, beta, gamma, t.normal[0], t.normal[1], t.normal[2], 1);
+                        // Texture
+                        auto interpolated_texcoords = interpolate(alpha, beta, gamma, t.tex_coords[0], t.tex_coords[1], t.tex_coords[2], 1);
+                        // ShadingCoords
+                        auto interpolated_shadingcoords = interpolate(alpha, beta, gamma, view_pos[0], view_pos[1], view_pos[2], 1);
+
+                        // 构造结构体传入shader
+                        fragment_shader_payload payload(interpolated_color, interpolated_normal.normalized(), interpolated_texcoords, texture ? &*texture : nullptr);
+                        payload.view_pos = interpolated_shadingcoords;
+                        // Use: Instead of passing the triangle's color directly to the frame buffer, pass the color to the shaders first to get the final color;
+                        auto pixel_color = fragment_shader(payload);
+                        depth_buf[idx] = -min_depth;
+                        set_pixel(Vector2i(x, y), pixel_color * count / 16.0);
+                    }   
+                }               
+            }
+        }
+    } else {
+        for (int x = x_min; x <= x_max; ++x) {
+            for (int y = y_min; y <= y_max; ++y) {
+                if (insideTriangle(x + 0.5, y + 0.5, t.v)) {
+
+                    // If so, use the following code to get the interpolated z value.
+                    auto[alpha, beta, gamma] = computeBarycentric2D(x+0.5, y+0.5, t.v);
+                    float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                    float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                    z_interpolated *= w_reciprocal;
+
+                    // std::cout << z_interpolated << std::endl;
+
+                    int idx = get_index(x, y);
+                    if (-z_interpolated < depth_buf[idx]) {
+                        // Color
+                        auto interpolated_color = interpolate(alpha, beta, gamma, t.color[0], t.color[1], t.color[2], 1);
+                        // Normal
+                        auto interpolated_normal = interpolate(alpha, beta, gamma, t.normal[0], t.normal[1], t.normal[2], 1);
+                        // Texture
+                        auto interpolated_texcoords = interpolate(alpha, beta, gamma, t.tex_coords[0], t.tex_coords[1], t.tex_coords[2], 1);
+                        // ShadingCoords
+                        auto interpolated_shadingcoords = interpolate(alpha, beta, gamma, view_pos[0], view_pos[1], view_pos[2], 1);
+
+                        fragment_shader_payload payload(interpolated_color, interpolated_normal.normalized(), interpolated_texcoords, texture ? &*texture : nullptr);
+                        payload.view_pos = interpolated_shadingcoords;
+                        // Use: Instead of passing the triangle's color directly to the frame buffer, pass the color to the shaders first to get the final color;
+                        auto pixel_color = fragment_shader(payload);
+
+                        depth_buf[idx] = -z_interpolated;
+                        set_pixel(Vector2i(x, y), pixel_color);
+                    }
+                }
+            }
+        }
+    }
  
 }
 

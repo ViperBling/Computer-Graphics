@@ -307,7 +307,7 @@ Eigen::Matrix4f get_orthogonality_matrix(float xLeft, float xRight, float yTop,
     Eigen::Matrix4f ortho = Eigen::Matrix4f::Identity();
 	// 分成缩放和平移两个变换
     Eigen::Matrix4f scale = Eigen::Matrix4f::Identity();
-    Eigen::Matrix4f trans = Eigen::Matrix4f::Identity()；
+    Eigen::Matrix4f trans = Eigen::Matrix4f::Identity();
 	// 缩放矩阵
     scale << 2 / (xRight - xLeft), 0,                    0,                  0,
              0,                    2 / (yTop - yBottom), 0,                  0,
@@ -338,7 +338,7 @@ Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
     // 注意这里zNear一定为负，因为以观察点为原点，向z轴负方向看去，远近平面都是负的。否则得到的三角形头向下。
     zNear = zNear > 0 ? -zNear : zNear;
     // 计算视锥的边界
-    float yTop = tanf(eye_fov / 2)* abs(zNear);
+    float yTop = tanf(eye_fov / 2) * abs(zNear);
     float yBottom = -yTop;
 
     float xRight = aspect_ratio * yTop;
@@ -550,16 +550,13 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
     for (int x = std::floor(bbx[0]); x < std::ceil(bbx[2]); ++x) {
         for (int y = std::floor(bbx[1]); y < std::ceil(bbx[3]); ++y) {
             if (insideTriangle(x, y, t.v)) {
-                Vector3f point = {x, y, 1.f};
-                
+                Vector3f point = {x, y, 1.f};                
                 // If so, use the following code to get the interpolated z value.
                 auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
                 float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
                 float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
                 z_interpolated *= w_reciprocal;
-
                 // std::cout << z_interpolated << std::endl;
-
                 int idx = get_index(x, y);
                 if (-z_interpolated < depth_buf[idx]) {
                     depth_buf[idx] = -z_interpolated;
@@ -575,11 +572,331 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
 
 然后是使用MSAA反走样。将一个像素分割成4个小像素，用这4个小像素颜色的均值来决定像素的颜色。当小像素落入三角形内部的数量越多，像素的颜色就越明显，否则越暗淡。
 
+```c++
+if (msaa) {
+    auto steps = {0.25f, 0.75f};
+    for (int x = std::floor(bbx[0]); x < std::ceil(bbx[2]); ++x) {
+        for (int y = std::floor(bbx[1]); y < std::ceil(bbx[3]); ++y) {
+                
+            Vector3f point = {x, y, 1.f};
+            int count = 0;					// 子像素落入三角形内部的数量
+            float min_depth = FLT_MAX;
+
+            for (auto delta_x : steps) {
+                for (auto delta_y : steps) {
+                    float subx = x + delta_x;		// 分割子像素
+                    float suby = y + delta_y;
+                    if (insideTriangle(subx, suby, t.v)) {
+                        count++;
+                        // If so, use the following code to get the interpolated z value.
+                        // 计算三角形重心坐标
+                        auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
+                        // v.w()是齐次坐标值
+                        float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                        // 得到深度值
+                        float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                        z_interpolated *= w_reciprocal;
+                        min_depth = std::min(min_depth, z_interpolated);
+                    }
+                }
+            }
+
+            if (count) {
+                int idx = get_index(x, y);
+                if (-min_depth < depth_buf[idx]) {
+                    depth_buf[idx] = -min_depth;
+                    // TODO : set the current pixel (use the set_pixel function) to the color of the triangle (use getColor function) if it should be painted.
+                    // 根据子像素在三角形内部的数量决定颜色
+                    set_pixel(point, count * t.getColor() / 4.0);
+                }   
+            }                
+        }
+    }
+}
+```
+
 # Assignment03. Blinn-Phong模型和纹理映射
 
+作业内容：
+
+- 修改函数`rasterize_triangle(const Triangle& t) in rasterizer.cpp`: 在此
+  处实现与作业2 类似的插值算法，实现法向量、颜色、纹理颜色的插值。
+
+- 修改函数`get_projection_matrix() in main.cpp`: 将你自己在之前的实验中
+  实现的投影矩阵填到此处，此时你可以运行./Rasterizer output.png normal
+  来观察法向量实现结果。
+
+- 修改函数`phong_fragment_shader() in main.cpp`: 实现Blinn-Phong 模型计
+  算Fragment Color.
+
+- 修改函数`texture_fragment_shader() in main.cpp`: 在实现Blinn-Phong
+  的基础上，将纹理颜色视为公式中的kd，实现Texture Shading Fragment
+  Shader.
+
+- 修改函数`bump_fragment_shader() in main.cpp`: 在实现Blinn-Phong 的
+  基础上，仔细阅读该函数中的注释，实现Bump mapping.
+
+- 修改函数`displacement_fragment_shader() in main.cpp`: 在实现Bump
+  mapping 的基础上，实现displacement mapping.
+
+## 1. 实现插值算法
+
+这一步主要是实现差值算法和简单的法线贴图，根据贴图法线方向生成对应的像素的颜色。首先是切空间，它是由物体表面的法线、贴图的UV向量组成的一个坐标系，也就是TBN空间。定义切空间可以用来计算法线、凹凸、视差、置换贴图等。法线贴图就是用法线向量代表RGB三个通道的值，并将其作为纹理，显示到物体表面。
+
+![img](record.assets/v2-3e59e4cfa355e4ea63ec25f23e0d3d4f_1440w.jpg)
+
+在高模中计算法线，生成凹凸不平的法线贴图，然后再将其应用到低模中，可以节省计算量并得到较好的效果
+
+![Comparrison of visualizing details on a mesh with and without normal mapping](record.assets/normal_mapping_comparison.png)
+
+首先看`Triangle`的定义：
+
+```c++
+class Triangle{
+public:
+    Vector4f v[3]; /*the original coordinates of the triangle, v0, v1, v2 in counter clockwise order*/
+    /*Per vertex values*/
+    Vector3f color[3];              //color at each vertex;
+    Vector2f tex_coords[3];         //texture u,v
+    Vector3f normal[3];             //normal vector for each vertex
+
+    Texture *tex= nullptr;
+    Triangle();
+
+    Eigen::Vector4f a() const { return v[0]; }
+    Eigen::Vector4f b() const { return v[1]; }
+    Eigen::Vector4f c() const { return v[2]; }
+
+    void setVertex(int ind, Vector4f ver); /*set i-th vertex coordinates */
+    void setNormal(int ind, Vector3f n); /*set i-th vertex normal vector*/
+    void setColor(int ind, float r, float g, float b); /*set i-th vertex color*/
+
+    void setNormals(const std::array<Vector3f, 3>& normals);
+    void setColors(const std::array<Vector3f, 3>& colors);
+    void setTexCoord(int ind,Vector2f uv ); /*set i-th vertex texture coordinate*/
+    std::array<Vector4f, 3> toVector4() const;
+};
+```
+
+可以看到其中定义了三个顶点的坐标、颜色、对应贴图的UV、法向。我们要做的就是对这三个值插值。代码中提供了插值函数`static Eigen::Vector3f interpolate(float alpha, float beta, float gamma, const Eigen::Vector3f& vert1, const Eigen::Vector3f& vert2, const Eigen::Vector3f& vert3, float weight)`，这个是3维向量版本的，还有一个二维向量版本的重载。
+
+回想上一次作业，在确定哪些像素点在三角形内部后，根据深度值就可以确定当前像素绘制的颜色。这次不能直接绘制其颜色，而是要加入三角形插值后的顶点属性，以确定其颜色。分别对属性进行插值：
+
+```c++
+for (int x = std::floor(bbx[0]); x < std::ceil(bbx[2]); ++x) {
+    for (int y = std::floor(bbx[1]); y < std::ceil(bbx[3]); ++y) {
+        if (insideTriangle(x + 0.5, y + 0.5, t.v)) {
+            Vector3f point = {x, y, 1.f};
+
+            // If so, use the following code to get the interpolated z value.
+            auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
+            float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+            float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+            z_interpolated *= w_reciprocal;
+            
+            int idx = get_index(x, y);
+            if (-z_interpolated < depth_buf[idx]) {
+                // 颜色插值
+                auto interpolated_color = interpolate(alpha, beta, gamma, t.color[0], t.color[1], t.color[2], 1);
+                // 发现插值
+                auto interpolated_normal = interpolate(alpha, beta, gamma, t.normal[0], t.normal[1], t.normal[2], 1);
+                // 纹理插值
+                auto interpolated_texcoords = interpolate(alpha, beta, gamma, t.tex_coords[0], t.tex_coords[1], t.tex_coords[2], 1);
+                // Shading坐标插值
+                auto interpolated_shadingcoords = interpolate(alpha, beta, gamma, view_pos[0], view_pos[1], view_pos[2], 1);
+				// 构造传递结果的结构体
+                fragment_shader_payload payload( interpolated_color, interpolated_normal.normalized(), interpolated_texcoords, texture ? &*texture : nullptr);		
+                // 设置观察位置，也就是观察向量
+                payload.view_pos = interpolated_shadingcoords;
+                // Use: Instead of passing the triangle's color directly to the frame buffer, pass the color to the shaders first to get the final color;
+                auto pixel_color = fragment_shader(payload);
+
+                depth_buf[idx] = -z_interpolated;
+                set_pixel(point, pixel_color);
+        	}
+    	}
+	}
+}
+```
+
+然后修改`get_projection_matrix() in main.cpp`，将前面实验的代码加入，修改`eye_fov`为弧度，即可。这样就完成了第1，2步。
+
+做到这步在运行的时候还是有些问题，就是运行速度很慢，而且一直不出结果。经过排查，是Bounding Box出现了问题，在计算bbx的时候，每次都要得到`point.x()`等，耗时较多，直接取`x,y`中最大的和最小的即可：
+
+```c++
+// 原版
+for (auto point : v) {
+     bbx[0] = bbx[0] < point.x() ? bbx[0] : point.x();
+     bbx[1] = bbx[1] < point.y() ? bbx[1] : point.y();
+     bbx[2] = bbx[2] > point.x() ? bbx[2] : point.x();
+     bbx[3] = bbx[3] > point.y() ? bbx[3] : point.y();
+}
+
+int x_min = std::floor(bbx[0]);
+int x_max = std::ceil(bbx[2]);
+int y_min = std::floor(bbx[1]);
+int y_max = std::ceil(bbx[3]);
+
+// 修正版
+float min_x = std::min(v[0][0], std::min(v[1][0], v[2][0]));
+float max_x = std::max(v[0][0], std::max(v[1][0], v[2][0]));
+float min_y = std::min(v[0][1], std::min(v[1][1], v[2][1]));
+float max_y = std::max(v[0][1], std::max(v[1][1], v[2][1]));
+
+int x_min = std::floor(min_x);
+int x_max = std::ceil(max_x);
+int y_min = std::floor(min_y);
+int y_max = std::ceil(max_y);
+```
+
+这样就可以很快生成图片了：
+
+![output](record.assets/output.png)
+
+## 3. 实现Blinn-Phong模型
+
+Blinn-Phong模型包含三项，环境光、漫反射、高光。
+
+### a. 环境光
+
+环境光比较简单，可以假设光是从四面八方射过来，到达物体表面时的能量（强度）为$I$，然后乘以物体表面材质的环境光系数$k_a$：
+$$
+L_a = k_a \times I
+$$
+
+### b. 漫反射
 
 
 
+![截屏2020-11-19 上午11.13.41](record.assets/%E6%88%AA%E5%B1%8F2020-11-19%20%E4%B8%8A%E5%8D%8811.13.41.png)
 
+漫反射在物体表面是和观察者位置无关的，影响它的因素主要是表面法线和光线方向。到达物体的能量反射出去的和法向与入射光线的夹角有关。
 
+### c. 高光
+
+![image-20201119141540813](record.assets/image-20201119141540813.png)
+
+高光会随着观察者的角度发生变化，所以要加入观察者视角v，同时，为了方便计算$\cos\alpha$，不妨加入半程向量h。
+
+最终就可以得到Blinn-Phong模型的结果：
+
+![image-20201119142031380](record.assets/image-20201119142031380.png)
+
+在代码中，修改`phong_fragment_shader() in main.cpp`，在`for`循环中遍历光线，计算模型参数。所给框架代码中，`point`是物体表面所在位置。`squaredNorm`用来计算L2范数，也就是自身长度。`cwiseProduct`用来计算向量数乘，也就是对应点乘。
+
+```c++
+for (auto& light : lights)
+{
+    // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
+    // components are. Then, accumulate that result on the *result_color* object.
+    // 光线向量
+    Eigen::Vector3f l = (light.position - point).normalized();
+    Eigen::Vector3f v = (eye_pos - point).normalized();
+    // 半程向量，h = v + l
+    Eigen::Vector3f h = (v + l).normalized();
+    // squaredNorm是平方再开方，也就是向量的长度，光源到物体的距离
+    auto r2 = (light.position - point).squaredNorm();
+    // 环境光
+    auto ambient = ka.cwiseProduct(amb_light_intensity);
+    // 漫反射
+    auto diffuse = kd.cwiseProduct(light.intensity / r2 * std::max(0.0f, normal.dot(l)));
+     // 高光
+     auto specular = ks.cwiseProduct(light.intensity / r2 * std::pow(std::max(0.0f, normal.dot(h)), p));
+		 // 因为是多数光线叠加的效果，所以要result_color自增。
+     result_color += ambient + diffuse + specular;
+}
+```
+
+最终结果如下图所示：
+
+![output](record.assets/output-1606294929787.png)
+
+## 4. 实现Texture Shading Fragment Shader
+
+要修改的包括两个部分，首先从payload获取材质颜色。在Texture类中定义了`getColor`方法，用来获取纹理坐标对应的颜色，这里纹理坐标可能为负，所以加入了限定，固定其在$[0,1]$之间。
+
+```c++
+Eigen::Vector3f getColor(float u, float v)
+    {
+    	u = u < 0 ? 0 : u;
+        u = u > 1 ? 1 : u;
+        v = v < 0 ? 0 : v;
+        v = v > 1 ? 1 : v;
+        auto u_img = u * width;
+        auto v_img = (1 - v) * height;
+        auto color = image_data.at<cv::Vec3b>(v_img, u_img);
+        return Eigen::Vector3f(color[0], color[1], color[2]);
+    }
+```
+
+返回材质贴图对应U，V处的颜色值，然后附加到对应位置的颜色上：
+
+```c++
+if (payload.texture)
+    {
+        // TODO: Get the texture value at the texture coordinates of the current fragment
+    	// 获取纹理坐标的颜色
+        return_color = payload.texture->getColor(payload.tex_coords.x(), payload.tex_coords.y());
+    }
+```
+
+第二步要求计算对应位置的环境光、漫反射、高光，这里和Blinn-Phong模型完全相同，最后得到如下图：
+
+![outTexture](record.assets/outTexture.png)
+
+## 5. 在Blinn-Phong的基础上实现法线贴图
+
+Bump Mapping即凹凸贴图，也就是法线贴图。通过将物体表面的法线方向记录在法线贴图上，在着色时使用这些法线信息来计算每个像素上的光照，这样就能够在不增加顶点数量的情况下增加物体变面凹凸细节。
+
+![Surfaces displaying per-surface normal and per-fragment normals for normal mapping in OpenGL](record.assets/normal_mapping_surfaces.png)
+
+![Surface without and with normal mapping in OpenGL](record.assets/normal_mapping_compare.png)
+
+通常我们要为每个fragment提供一个法线，而不是每个三角形。用法向的$x,y,z$表示RGB颜色，法线向量的范围在$[-1,1]$，所以要进行归一化Normalized。正常法线贴图都是偏蓝色的，因为法线向量是$(0,0,1)$，归一化计算后就变成了$(0.5,0.5,1)$，对应到颜色就是$(128,128,255)$，也就是偏蓝的颜色。
+
+https://www.cnblogs.com/lookof/p/3509970.html
+
+实现Bump Mapping时，按照注释填写即可：
+
+```c++
+// TODO: Implement bump mapping here
+    // Let n = normal = (x, y, z)
+    // Vector t = (x*y/sqrt(x*x+z*z),sqrt(x*x+z*z),z*y/sqrt(x*x+z*z))
+    // Vector b = n cross product t
+    // Matrix TBN = [t b n]
+    // dU = kh * kn * (h(u+1/w,v)-h(u,v))
+    // dV = kh * kn * (h(u,v+1/h)-h(u,v))
+    // Vector ln = (-dU, -dV, 1)
+    // Normal n = normalize(TBN * ln)
+    Eigen::Vector3f n = normal.normalized();
+
+    float x = n.x(), y = n.y(), z = n.z();
+    Eigen::Vector3f t{x*y / sqrt(x*x + z*z), sqrt(x*x + z*z), z*y / sqrt(x*x + z*z)};
+    Eigen::Vector3f b = n.cross(t);
+    Eigen::Matrix3f TBN;
+    TBN << t.x(), b.x(), n.x(),
+           t.y(), b.y(), n.y(),
+           t.z(), b.z(), n.z();
+    
+    float u = payload.tex_coords.x();
+    float v = payload.tex_coords.y();
+    float w = payload.texture->width;
+    float h = payload.texture->height;
+
+    float dU = kh * kn * (payload.texture->getColor(u + 1.0f/w, v).norm() - payload.texture->getColor(u, v).norm());
+    float dV = kh * kn * (payload.texture->getColor(u, v + 1.0f/h).norm() - payload.texture->getColor(u, v).norm());
+
+    Eigen::Vector3f ln{ -dU, -dV, 1.0f };
+    normal = (TBN * ln).normalized();
+```
+
+整个过程就是根据法向方向求出切线方向，并建立坐标系TBN，得到TBN矩阵。
+
+Displacement Mapping同样如此。最后结果如下。BumpMapping：
+
+![outBump](record.assets/outBump.png)
+
+Displacement Mapping：
+
+![outDis](record.assets/outDis.png)
 

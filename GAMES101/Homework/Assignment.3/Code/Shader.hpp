@@ -1,3 +1,10 @@
+/*
+ * @Author: Zero
+ * @Date: 2020-11-16 16:25:28
+ * @LastEditTime: 2020-11-19 09:00:03
+ * @Description: 
+ * @可以输入预定的版权声明、个性签名、空行等
+ */
 //
 // Created by LEI XU on 4/27/19.
 //
@@ -15,7 +22,7 @@ struct fragment_shader_payload
         texture = nullptr;
     }
 
-    fragment_shader_payload(const Eigen::Vector3f& col, const Eigen::Vector3f& nor,const Eigen::Vector2f& tc, Texture* tex) :
+    fragment_shader_payload(const Eigen::Vector3f& col, const Eigen::Vector3f& nor, const Eigen::Vector2f& tc, Texture* tex) :
          color(col), normal(nor), tex_coords(tc), texture(tex) {}
 
 
