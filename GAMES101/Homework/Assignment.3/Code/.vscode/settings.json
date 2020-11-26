@@ -1,8 +1,6 @@
 {
     "C_Cpp.default.configurationProvider": "go2sh.cmake-integration",
     "files.associations": {
-        "optional": "cpp",
-        "complex": "cpp",
-        "core": "cpp"
+        "optional": "cpp"
     }
 }
