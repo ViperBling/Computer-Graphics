@@ -968,3 +968,181 @@ Eigen::Vector3f getColorBilinear(float u, float v)
 ![outTextureB](record.assets/outTextureB-6378164.png)
 
 可以看到结果还是挺明显的。
+
+# Assignment04. Bezier Curves
+
+要求绘制贝塞尔曲线。首先回顾一下贝塞尔曲线的绘制流程。贝塞尔曲线是由有限个点确定的一条曲线。
+
+## 1. 一阶贝塞尔曲线
+
+一阶贝塞尔曲线有两个控制点，根据一个控制自变量$t,t\in [0,1]$，可以遍历从两点之间所有的位置，从而绘制出一条直线：
+
+![image-20201216151912884](record.assets/image-20201216151912884.png)
+
+对于曲线上的点，可以表示为：
+$$
+B_1(t) = P_o + (P_1 - P_0)t = (1-t)P_0 + tP_1
+$$
+
+其实就是根据$t$的值进行插值得到的曲线。
+
+## 2. 二阶贝塞尔曲线
+
+二阶贝塞尔曲线由一阶得来。同样有一个自变量$t$来生成曲线，三个点$P_0$到$P_1$，$P_1$到$P_2$上分别用线段连接：
+
+![img](record.assets/v2-c269abf84bea8a1ebed4c3808cd3e8b2_720w.jpg)
+
+$t$同时在这两个线段上变化，将这两个点连接起来，就得到了一条随着$t$变化而变化的线段：
+
+![img](record.assets/v2-b5b6314c8554b990f7a838edaf02c3e6_720w.jpg)
+
+同时，$t$也在上面随着自身大小而变化，也就是变成了一阶贝塞尔曲线的情况，只不过这里两个控制点是变化的$D,E$，那么随着$t$的变化就生成了一条曲线，就是二阶贝塞尔曲线：
+
+![img](record.assets/v2-77478be23c35ccda6a364bf0b5c1d59f_720w.jpg)
+
+
+
+![image-20201216153512998](record.assets/image-20201216153512998.png)
+$$
+\begin{align}
+P_0^1 &= (1-t)P_0 + tP_1 \\
+P_1^1 &= (1-t)P_1 + tP_2 \\
+P_0^2 &= (1-t)P_0^1 + tP_1^1 \\
+&= (1-t)^2P_0+2t(1-t)P_1+t^2P_2
+\end{align}
+$$
+
+## 3. 三阶贝塞尔曲线
+
+从上面可以看出，贝塞尔曲线是一个递归曲线，三阶曲线由两个二阶的得出，然后两个二阶曲线得到一个一阶曲线，最终得到一个三阶曲线。同时贝塞尔曲线的系数是关于$t,1-t$的二项展开式：
+$$
+\begin{align}
+P(t) &= \sum_{i=0}^nP_iB_{i,n}(t),\quad t\in [0,1] \\
+B_{i,n} &= C_n^it^i(1-t)^{n-i}
+\end{align}
+$$
+贝塞尔曲线的性质：
+
+- 各项系数和为1
+- 递归性
+- 凸包性质，曲线始终被包含在所有控制点的最小凸多边形中
+- 一阶导数的性质，起点和终点的一阶导数相同。
+
+根据上面的知识，就可以开始写代码啦。给出的代码模板如下：
+
+```c++
+cv::Point2f recursive_bezier(const std::vector<cv::Point2f> &control_points, float t) 
+{
+    // TODO: Implement de Casteljau's algorithm
+}
+
+void bezier(const std::vector<cv::Point2f> &control_points, cv::Mat &window) 
+{
+    // TODO: Iterate through all t = 0 to t = 1 with small steps, and call de Casteljau's 
+    // recursive Bezier algorithm.
+}
+```
+
+`recursive_bezier`是递归主体，根据$t$返回得到的点的位置，递归终止条件是只有两个点的时候，直接返回两个点关于$t$的插值。代码如下：
+
+```c++
+cv::Point2f recursive_bezier(const std::vector<cv::Point2f> &control_points, float t) 
+{
+    // TODO: Implement de Casteljau's algorithm
+    std::vector<cv::Point2f> vec;
+    if (control_points.size() == 2)  
+        return (1-t) * control_points[0] + t * control_points[1];
+    
+    for (int i = 0; i < control_points.size() - 1; ++i)
+        vec.emplace_back((1-t) * control_points[i] + t * control_points[i+1]);
+    
+    return recursive_bezier(vec, t);
+}
+```
+
+然后根据得到的点，就可以绘制出贝塞尔曲线了：
+
+```c++
+void bezier(const std::vector<cv::Point2f> &control_points, cv::Mat &window) 
+{
+    // TODO: Iterate through all t = 0 to t = 1 with small steps, and call de Casteljau's 
+    // recursive Bezier algorithm.
+    for (double t = 0.0; t <= 1.0; t += 0.001) {
+        auto point = recursive_bezier(control_points, t);
+        // window.at<cv::Vec3b>(point.y, point.x)[0] = 255;         // B
+        window.at<cv::Vec3b>(point.y, point.x)[1] = 255;            // G
+        // window.at<cv::Vec3b>(point.y, point.x)[2] = 255;         // R
+    }
+}
+```
+
+绘制出的曲线是绿色的，包含4个控制点：
+
+![image-20201216161956772](record.assets/image-20201216161956772.png)
+
+如果同时调用`naive_bezier`和`bezier`就可以得到黄色的曲线（由红色和绿色叠加得到）：
+
+![image-20201216162111420](record.assets/image-20201216162111420.png)
+
+6个控制点：
+
+![image-20201216162657124](record.assets/image-20201216162657124.png)
+
+## 4. 曲线反走样
+
+图中的曲线锯齿还是比较明显的，可以使用双线性插值算法反走样
+
+```c++
+void bezier(const std::vector<cv::Point2f> &control_points, cv::Mat &window) 
+{
+    // TODO: Iterate through all t = 0 to t = 1 with small steps, and call de Casteljau's 
+    // recursive Bezier algorithm.
+    for (double t = 0.0; t <= 1.0; t += 0.001) {
+        auto point = recursive_bezier(control_points, t);
+        // window.at<cv::Vec3b>(point.y, point.x)[0] = 255;         // B
+        window.at<cv::Vec3b>(point.y, point.x)[1] = 255;            // G
+        // window.at<cv::Vec3b>(point.y, point.x)[2] = 255;         // R
+
+
+        // anti aliasing
+        float x = point.x - std::floor(point.x);
+        float y = point.y - std::floor(point.y);
+        int x_flag = x < 0.5f ? -1 : 1;
+        int y_flag = y < 0.5f ? -1 : 1;
+
+        // 当前位置的临近4个像素，p00是像素中心点
+        auto p00 = cv::Point2f(std::floor(point.x) + 0.5f, std::floor(point.y) + 0.5f);
+        // 左边（假设point的位置在当前像素左下的位置，那么离它最近的4个像素点位置在它左侧包围）
+        auto p01 = cv::Point2f(std::floor(point.x + x_flag * 1.0f) + 0.5f, std::floor(point.y) + 0.5f);
+        // 下边
+        auto p10 = cv::Point2f(std::floor(point.x) + 0.5f, std::floor(point.y + y_flag * 1.0f) + 0.5f);
+        // 左下
+        auto p11 = cv::Point2f(std::floor(point.x + x_flag * 1.0f) + 0.5f, std::floor(point.y + y_flag * 1.0f) + 0.5f);
+
+        std::vector<cv::Point2f> vec;
+        vec.emplace_back(p01);
+        vec.emplace_back(p10);
+        vec.emplace_back(p11);
+		
+        // 计算最近的坐标点距离采样点的距离
+        cv::Point2f distance = p00 - point;
+        float len = sqrt(distance.x * distance.x + distance.y * distance.y);
+
+        for (auto p : vec) {
+            // point所在的像素已经着色，只需要对剩余的三个像素按照距离远近着色即可
+            cv::Point2f d = p - point;
+            float l = sqrt(d.x * d.x + d.y * d.y);
+            float percent = len / l;
+
+            cv::Vec3d  color = window.at<cv::Vec3b>(p.y, p.x);
+            // 取最大值
+            color[1] = std::max(color[1], (double)255 * percent);
+            window.at<cv::Vec3b>(p.y, p.x) = color;
+        }
+    }
+}
+```
+
+![image-20201216164057477](record.assets/image-20201216164057477.png)
+
+效果很明显。
