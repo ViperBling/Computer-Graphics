@@ -1,0 +1,17 @@
+[
+{
+  "directory": "/home/zero/Program/ComputerGraphics/Code/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -pedantic -Wshadow -Wreturn-type -fsanitize=undefined -std=gnu++17 -o CMakeFiles/RayTracing.dir/main.cpp.o -c /home/zero/Program/ComputerGraphics/Code/main.cpp",
+  "file": "/home/zero/Program/ComputerGraphics/Code/main.cpp"
+},
+{
+  "directory": "/home/zero/Program/ComputerGraphics/Code/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -pedantic -Wshadow -Wreturn-type -fsanitize=undefined -std=gnu++17 -o CMakeFiles/RayTracing.dir/Scene.cpp.o -c /home/zero/Program/ComputerGraphics/Code/Scene.cpp",
+  "file": "/home/zero/Program/ComputerGraphics/Code/Scene.cpp"
+},
+{
+  "directory": "/home/zero/Program/ComputerGraphics/Code/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -pedantic -Wshadow -Wreturn-type -fsanitize=undefined -std=gnu++17 -o CMakeFiles/RayTracing.dir/Renderer.cpp.o -c /home/zero/Program/ComputerGraphics/Code/Renderer.cpp",
+  "file": "/home/zero/Program/ComputerGraphics/Code/Renderer.cpp"
+}
+]

@@ -1146,3 +1146,103 @@ void bezier(const std::vector<cv::Point2f> &control_points, cv::Mat &window)
 ![image-20201216164057477](record.assets/image-20201216164057477.png)
 
 效果很明显。
+
+# Assignment05. 光线追踪
+
+## 1. 渲染光线
+
+这里假设光线从观察位置出发。框架中设置了一个指定大小的Scene，从眼睛位置出发的光线经过每个像素到达场景。Scene的`Width`范围是`[0,width-1]`，`Height`范围是`[height-1, 0]`。
+
+对于像素位置`[i,j]`，光线穿过其中心，要根据`[i,j]`计算$(x,y)$，首先要将水平像素坐标除以图像宽度将其范围映射到`[0,1]`，然后乘以缩放因子和图像宽高比映射到`[-1,1]`，对于垂直像素也是如此，参考链接如下：
+
+https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-generating-camera-rays/generating-camera-rays
+
+```c++
+void Renderer::Render(const Scene& scene)
+{
+    std::vector<Vector3f> framebuffer(scene.width * scene.height);
+
+    // 观察范围的tan值，即屏幕大小和观察点到屏幕距离的比例
+    float scale = std::tan(deg2rad(scene.fov * 0.5f));
+    // 屏幕宽高比
+    float imageAspectRatio = scene.width / (float)scene.height;
+
+    // Use this variable as the eye position to start your rays.
+    Vector3f eye_pos(0);
+    int m = 0;
+    for (int j = 0; j < scene.height; ++j)
+    {
+        for (int i = 0; i < scene.width; ++i)
+        {
+            // generate primary ray direction
+            float x;
+            float y;
+            // TODO: Find the x and y positions of the current pixel to get the direction
+            // vector that passes through it.
+            // Also, don't forget to multiply both of them with the variable *scale*, and
+            // x (horizontal) variable with the *imageAspectRatio*            
+
+            x = (((i + 0.5) / ((float)scene.width) * 2) - 1) * imageAspectRatio * scale;
+            y = (1 - (j + 0.5) / (float)scene.height * 2) * scale;
+
+            Vector3f dir = normalize(Vector3f(x, y, -1)); // Don't forget to normalize this direction!
+            framebuffer[m++] = castRay(eye_pos, dir, scene, 0);
+        }
+        UpdateProgress(j / (float)scene.height);
+    }
+
+    // save framebuffer to file
+    FILE* fp = fopen("binary.ppm", "wb");
+    (void)fprintf(fp, "P6\n%d %d\n255\n", scene.width, scene.height);
+    for (auto i = 0; i < scene.height * scene.width; ++i) {
+        static unsigned char color[3];
+        color[0] = (char)(255 * clamp(0, 1, framebuffer[i].x));
+        color[1] = (char)(255 * clamp(0, 1, framebuffer[i].y));
+        color[2] = (char)(255 * clamp(0, 1, framebuffer[i].z));
+        fwrite(color, 1, 3, fp);
+    }
+    fclose(fp);    
+}
+```
+
+## 2. 光线和物体求交
+
+![在这里插入图片描述](record.assets/61c77ad469613797c0211aaa7484e075.png)
+
+利用重心坐标，当三个分量和为1的时候点在三角形定义的平面内，如果满足$b_1>0,b_2>0,1-b_1-b_2>0$，那么点在三角形内。此时联立直线点向式方程和三条边定义的平面方程，求出方程组的解。如果方程组有唯一解，且满足$t>0$，说明交点在三角形内部。
+
+```c++
+bool rayTriangleIntersect(const Vector3f& v0, const Vector3f& v1, const Vector3f& v2, const Vector3f& orig,
+                          const Vector3f& dir, float& tnear, float& u, float& v)
+{
+    // TODO: Implement this function that tests whether the triangle
+    // that's specified bt v0, v1 and v2 intersects with the ray (whose
+    // origin is *orig* and direction is *dir*)
+    // Also don't forget to update tnear, u and v.
+
+    // v0,v1,v2是三角形的三条边，利用重心坐标求解交点
+    Vector3f E1 = v1 - v0;
+    Vector3f E2 = v2 - v0;
+    Vector3f S = orig - v0;
+    Vector3f S1 = crossProduct(dir, E2);
+    Vector3f S2 = crossProduct(S, E1);
+
+    float temp = dotProduct(E1, S1);
+    if (temp == 0 || temp < 0) return false;
+
+    // 重心坐标
+    u = dotProduct(S1, S) / temp;
+    v = dotProduct(dir, S2) / temp;
+    tnear = dotProduct(S2, E2) / temp;
+	// 判断点是否在三角形内
+    if (u >= 0 && v >= 0 && tnear >= 0 && (1 - u - v) >= -__FLT_EPSILON__) 
+        return true;
+    else
+        return false;
+}
+```
+
+最终渲染得到的结果如下：
+
+![binary](record.assets/binary.bmp)
+

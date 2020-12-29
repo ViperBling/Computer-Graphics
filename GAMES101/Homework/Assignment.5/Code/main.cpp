@@ -1,3 +1,10 @@
+/*
+ * @Author: Zero
+ * @Date: 2020-12-27 22:11:52
+ * @LastEditTime: 2020-12-28 20:46:26
+ * @Description: 
+ * @可以输入预定的版权声明、个性签名、空行等
+ */
 #include "Scene.hpp"
 #include "Sphere.hpp"
 #include "Triangle.hpp"
@@ -11,6 +18,7 @@ int main()
 {
     Scene scene(1280, 960);
 
+    // 定义一个球面
     auto sph1 = std::make_unique<Sphere>(Vector3f(-1, 0, -12), 2);
     sph1->materialType = DIFFUSE_AND_GLOSSY;
     sph1->diffuseColor = Vector3f(0.6, 0.7, 0.8);
@@ -19,6 +27,7 @@ int main()
     sph2->ior = 1.5;
     sph2->materialType = REFLECTION_AND_REFRACTION;
 
+    // std::move()是右值引用
     scene.Add(std::move(sph1));
     scene.Add(std::move(sph2));
 

@@ -1,0 +1,5 @@
+/home/zero/Program/ComputerGraphics/Code/build/CMakeFiles/package_source.dir
+/home/zero/Program/ComputerGraphics/Code/build/CMakeFiles/rebuild_cache.dir
+/home/zero/Program/ComputerGraphics/Code/build/CMakeFiles/package.dir
+/home/zero/Program/ComputerGraphics/Code/build/CMakeFiles/edit_cache.dir
+/home/zero/Program/ComputerGraphics/Code/build/CMakeFiles/RayTracing.dir
