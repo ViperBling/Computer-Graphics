@@ -1246,3 +1246,377 @@ bool rayTriangleIntersect(const Vector3f& v0, const Vector3f& v1, const Vector3f
 
 ![binary](record.assets/binary.bmp)
 
+# Assignment06. 加速结构
+
+实现Ray-Bounding Volume（BVH）求交与BVH查找。在本次编程练习中，你需要实现以下函数：
+
+- `IntersectP(const Ray& ray, const Vector3f& invDir, const std::array<int, 3>& dirIsNeg)` in the Bounds3.hpp:  这个函数的作用是判断包围盒BoundingBox 与光线是否相交，你需要按照课程介绍的算法实现求交过程。
+- `getIntersection(BVHBuildNode* node, const Ray ray)`in BVH.cpp: 建立BVH 之后，我们可以用它加速求交过程。该过程递归进行，你将在其中调用你实现的Bounds3::IntersectP
+
+## 1. 空间划分基础
+
+本次作业主要是空间三角形面划分的问题。轴对齐包围盒（Axis-Aligned Bounding Box，AABB）是用和坐标轴平面平行的平面包围物体。判断光线和物体是否相交时，可以先判断是否与AABB相交，如果相交再进一步判断，否则可以不用继续，节省时间：
+
+![image-20210129114939825](record.assets/image-20210129114939825.png)
+
+二维情况如上图所示（可以容易推广到三维），光线射过来，和垂直于x轴的两个平面会有两个交点$t_{min}^x,t_{max}^x$，对应y轴也是如此。光线和包围盒真正的交点如图中的第三种情况所示，光线有进入包围盒的点$t_{enter}$，射出包围盒的点$t_{exit}$，满足关系：$t_{enter}=max(t_{min}),t_{exit} = min(t_{max})$。要注意的是：
+
+- 当$t_{enter} < t_{exit}$的时候，可以认为光线在包围盒中走过了一段，也就是穿过包围盒
+- 光线是射线，所以$t_{exit} >= 0$，否则光线出发点在包围盒外面朝反方向发射光线
+
+## 2. KD-Tree划分
+
+划分结果如下：
+
+![image-20210129141419294](record.assets/image-20210129141419294.png)
+
+对于A也要进行同样的划分，这里没有画出来。
+
+- 非叶节点存储
+  - 划分坐标，x，y，z轴
+  - 划分位置
+  - 指向左右孩子的指针
+- 叶节点存储当前区域存储的物体
+
+划分完成后，空间内的物体就被分到各个区域，然后要遍历KD-Tree：
+
+![image-20210129141537058](record.assets/image-20210129141537058.png)
+
+- 判断光线与最外层的包围盒是否相交，相交的话进一步判断子空间是否相交。左右节点都要判断
+
+  ![image-20210129152748392](record.assets/image-20210129152748392.png)
+
+优点：利用KD-Tree的结构可以减少遍历的划分空间次数，在原始的AABB上加快了效率
+
+缺点：同一个三角面可能被不同包围盒占有，遍历的时候这些包围盒都要被访问，效率不高
+
+## 3. BVH(Bounding Volume Hierarchy)
+
+[BVH三角形划分]: https://zhuanlan.zhihu.com/p/144403802
+
+BVH不以空间为划分依据，而是直接划分三角形面。第一步将整个场景作为根节点：
+![image-20210128181248985](record.assets/image-20210128181248985.png)
+
+然后选择一部分三角形进一步划分，得到两个包围盒：
+
+![image-20210128181332104](record.assets/image-20210128181332104.png)
+
+包围盒会重叠，但是一个三角形面只属于一个包围盒。递归划分：
+
+![image-20210128181418307](record.assets/image-20210128181418307.png)
+
+Tips：
+
+- 每次划分选择最长的轴进行划分，假设是$x$轴，那么划分的选择点就是所有三角形面的重心坐标在$x$轴上的中位数。这样使得划分得到的树深度更小，更加平衡。
+- 中间节点不存储物体三角面的信息，只存储在叶节点上。
+- 递归终止条件可以设为包围盒内三角形的个数
+
+BVH加速结构的伪代码：
+
+```c++
+Intersect(Ray ray, BVH node) {
+    if (ray misses node.bbx) return;
+    
+    if (node is a leaf node) {
+        test intersection with all objs;
+        return closest intersection;
+    }
+    hit1 = Intersection(ray, node.child1);
+    hit2 = Intersection(ray, node.child2);
+    
+    return the closer of hit1, hit2;
+}
+```
+
+## 4. SAH(Surface Area Heuristic)
+
+首先实现光线和物体是否相交的函数，和上一节函数类似，这里框架代码进行了封装：
+
+```c++
+inline Intersection Triangle::getIntersection(Ray ray)
+{
+    Intersection inter;
+
+    // 下面其实就是MT算法的过程，计算交点，得到一个向量(t,u,v)
+    if (dotProduct(ray.direction, normal) > 0)
+        return inter;
+    double u, v, t_tmp = 0;
+    Vector3f pvec = crossProduct(ray.direction, e2);    // S1
+    double det = dotProduct(e1, pvec);
+    if (fabs(det) < EPSILON)
+        return inter;
+
+    double det_inv = 1. / det;
+    Vector3f tvec = ray.origin - v0;                    // S
+    u = dotProduct(tvec, pvec) * det_inv;
+    if (u < 0 || u > 1)
+        return inter;
+    Vector3f qvec = crossProduct(tvec, e1);             // S2
+    v = dotProduct(ray.direction, qvec) * det_inv;
+    if (v < 0 || u + v > 1)
+        return inter;
+    t_tmp = dotProduct(e2, qvec) * det_inv;
+
+    // TODO find ray triangle intersection
+    // 判断条件，t > 0 在三角形内
+    if (t_tmp < 0) return inter;
+
+    inter.distance = t_tmp;
+    inter.coords = ray(t_tmp);
+    inter.happened = true;
+    inter.m = m;
+    inter.normal = normal;
+    inter.obj = this;
+
+    return inter;
+}
+```
+
+补完`Render()`函数，计算光线在像素中的位置，然后渲染：
+
+```c++
+void Renderer::Render(const Scene& scene)
+{
+    std::vector<Vector3f> framebuffer(scene.width * scene.height);
+
+    float scale = tan(deg2rad(scene.fov * 0.5));
+    float imageAspectRatio = scene.width / (float)scene.height;
+    Vector3f eye_pos(-1, 5, 10);
+    int m = 0;
+    for (uint32_t j = 0; j < scene.height; ++j) {
+        for (uint32_t i = 0; i < scene.width; ++i) {
+            // generate primary ray direction
+            float x = (2 * (i + 0.5) / (float)scene.width - 1) *
+                      imageAspectRatio * scale;
+            float y = (1 - 2 * (j + 0.5) / (float)scene.height) * scale;
+            // TODO: Find the x and y positions of the current pixel to get the
+            // direction
+            //  vector that passes through it.
+            // Also, don't forget to multiply both of them with the variable
+            // *scale*, and x (horizontal) variable with the *imageAspectRatio*
+
+            Vector3f dir = normalize(Vector3f(x, y, -1));
+            Ray ray = {eye_pos, dir};
+            framebuffer[m++] = scene.castRay(ray, 0);
+
+            // Don't forget to normalize this direction!
+
+        }
+        UpdateProgress(j / (float)scene.height);
+    }
+    UpdateProgress(1.f);
+
+    // save framebuffer to file
+    FILE* fp = fopen("binary.ppm", "wb");
+    (void)fprintf(fp, "P6\n%d %d\n255\n", scene.width, scene.height);
+    for (auto i = 0; i < scene.height * scene.width; ++i) {
+        static unsigned char color[3];
+        color[0] = (unsigned char)(255 * clamp(0, 1, framebuffer[i].x));
+        color[1] = (unsigned char)(255 * clamp(0, 1, framebuffer[i].y));
+        color[2] = (unsigned char)(255 * clamp(0, 1, framebuffer[i].z));
+        fwrite(color, 1, 3, fp);
+    }
+    fclose(fp);    
+}
+```
+
+## 5. BVH实现
+
+首先是主要过程，也就是上面那段伪代码。通过`IntersectP`函数判断光线和包围盒是否相交：
+
+```c++
+Intersection BVHAccel::getIntersection(BVHBuildNode* node, const Ray& ray) const
+{
+    // TODO Traverse the BVH to find intersection
+
+    Vector3f invDir = Vector3f{1.0f/ray.direction.x, 1.0f/ray.direction.y, 1.0f/ray.direction.z};
+    std::array<int, 3> dirIsNeg = {ray.direction.x > 0, ray.direction.y > 0, ray.direction.z > 0};
+	
+    // ray：光线；invDir：光线方向的倒数，乘法快过除法；dirIsNeg：分量是否大于0
+    // 不相交直接返回
+    if (!node->bounds.IntersectP(ray, invDir, dirIsNeg)) return {};
+	// 是叶节点则返回最近的交点
+    if (node->left == nullptr && node->right == nullptr) return node->object->getIntersection(ray);
+	// 左右子树分别递归
+    Intersection h1 = getIntersection(node->left, ray);
+    Intersection h2 = getIntersection(node->right, ray);
+
+    return h1.distance < h2.distance ? h1 : h2;
+
+}
+```
+
+然后实现判断`IntersectP`函数。主要根据就是之前分析的判断包围盒和光线是否相交的方法，即
+
+- 当$t_{enter} < t_{exit}$的时候，可以认为光线在包围盒中走过了一段，也就是穿过包围盒
+- 光线是射线，所以$t_{exit} >= 0$，否则光线出发点在包围盒外面朝反方向发射光线
+
+```c++
+inline bool Bounds3::IntersectP(const Ray& ray, const Vector3f& invDir,
+                                const std::array<int, 3>& dirIsNeg) const
+{
+    // invDir: ray direction(x,y,z), invDir=(1.0/x,1.0/y,1.0/z), use this because Multiply is faster that Division
+    // dirIsNeg: ray direction(x,y,z), dirIsNeg=[int(x>0),int(y>0),int(z>0)], use this to simplify your logic
+    // TODO test if ray bound intersects
+	// 计算三个维度的光线出射和入射位置
+    float tx_min = (pMin.x - ray.origin.x) * invDir.x;
+    float tx_max = (pMax.x - ray.origin.x) * invDir.x;
+
+    float ty_min = (pMin.y - ray.origin.y) * invDir.y;
+    float ty_max = (pMax.y - ray.origin.y) * invDir.y;
+
+    float tz_min = (pMin.z - ray.origin.z) * invDir.z;
+    float tz_max = (pMax.z - ray.origin.z) * invDir.z;
+	
+    // 如果小于0，互换max和min
+    if (!dirIsNeg[0]) {
+        float t = tx_min;
+        tx_min = tx_max;
+        tx_max = t;
+    }
+
+    if(!dirIsNeg[1]) {
+        float t = ty_min;
+        ty_min = ty_max;
+        ty_max = t;
+    }
+
+    if(!dirIsNeg[2]) {
+        float t = tz_min;
+        tz_min = tz_max;
+        tz_max = t;
+    }
+	// 最终判断
+    float t_enter = std::max(tx_min, std::max(ty_min, tz_min));
+    float t_exit = std::min(tx_max, std::min(ty_max, tz_max));
+
+    if (t_enter <= t_exit && t_exit >= 0) return true;
+
+    return false;
+}
+```
+
+渲染结果：
+
+![binary](record.assets/binary.png)
+
+# Assignment07. 路径追踪
+
+修改函数`castRay(const Ray ray, int depth)` in Scene.cpp，其中实现了Path Tracing算法。涉及到的函数有：
+
+- `intersect(const Ray ray)` in Scene.cpp：求一条光线和场景的交点
+
+- `sampleLight(Intersection pos, float pdf)` in Scene.cpp: 在场景的所有光源上按面积均匀sample 一个点，并计算该sample的概率密度
+- `sample(const Vector3f wi, const Vector3f N)` in Material.cpp: 按照该材质的性质，给定入射方向与法向量，用某种分布采样一个出射方向
+- `pdf(const Vector3f wi, const Vector3f wo, const Vector3f N)` in Material.cpp: 给定一对入射、出射方向与法向量，计算sample 方法得到该出射方向的概率密度
+- `eval(const Vector3f wi, const Vector3f wo, const Vector3f N)` in Material.cpp: 给定一对入射、出射方向与法向量，计算这种情况下的`f_r`值
+- 可能用到的变量有：`RussianRoulette` in Scene.cpp: P_RR，Russian Roulette的概率
+
+https://zhuanlan.zhihu.com/p/234937961 本节的知识点解释。
+
+路径追踪的伪代码：
+
+```c++
+shade(p, wo)
+    // 对光源采样
+    Uniformly sample the light at xx(pdf_light = 1/A)
+    Shoot a ray from p to xx
+    If the ray is not blocked in the middle
+    	L_dir = L_i * f_r * cos_theta * cos_theta_x / |x-p|^2 / pdf_light
+    
+    L_indir = 0.0
+    Test Russian Roulette with probability P_RR
+    Uniformly sample the hemisphere toward wi(pdf_hemi = 1/2pi)
+    Trace a ray r(p,wi)
+    If ray r hit a non_emitting object at q
+    	L_indir = shade(q, wi) * f_r * cos_theta / pdf_hemi / P_RR
+Retrun L_dir + L_indir
+```
+
+首先，将上节实验的代码贴到本次的框架中：
+
+- `Triangle::getIntersection` in Triangle.hpp: 将你的光线-三角形相交函数粘贴到此处，请直接将上次实验中实现的内容粘贴在此。
+- `IntersectP(const Ray& ray, const Vector3f& invDir,const std::array<int, 3>& dirIsNeg)` in the Bounds3.hpp: 这个函数的作用是判断包围盒BoundingBox 与光线是否相交，请直接将上次实验中实现的内容粘贴在此处，并且注意检查t_enter = t_exit 的时候的判断是否正确。
+- `getIntersection(BVHBuildNode* node, const Ray ray)` in BVH.cpp: BVH查找过程，请直接将上次实验中实现的内容粘贴在此处.
+
+完成上述步骤后，代码框架可以正常运行。
+
+下一步，实现`castRay(const Ray &ray, int depth)`。参数分别是光线和弹射次数。
+
+```c++
+Vector3f Scene::castRay(const Ray &ray, int depth) const
+{
+    // TO DO Implement Path Tracing Algorithm here
+	
+    Vector3f ldir = {0, 0, 0};			// 对光源直接采样得到的光线
+    Vector3f lindir = {0, 0, 0};		// 其他物体反射过来的光线
+	
+    // 得到光线和场景中物体的交点
+    Intersection objectInter = intersect(ray);
+    // 没有交点，说明没有物体，直接返回即可
+    if(!objectInter.happened) return {};
+
+	// 物体自发光，返回其发射出的光线
+    if(objectInter.m->hasEmission()) return objectInter.m->getEmission();
+	
+    // 对交点位置采样，lightpdf只是初始化，会在Sphere.hpp的Sample函数中计算
+    Intersection lightInter;
+    float lightPdf = 0.0f;
+    sampleLight(lightInter, lightPdf);
+
+	// 物体到光源的向量
+    Vector3f obj2light = lightInter.coords - objectInter.coords;
+    Vector3f obj2lightdir = obj2light.normalized();
+
+    // |x-p|^2
+    float distancePow2 = obj2light.x * obj2light.x + obj2light.y * obj2light.y + obj2light.z * obj2light.z;
+	// Shoot a ray from p to x；交点位置，指向光线方向
+    Ray obj2lightray = {objectInter.coords, obj2lightdir};
+    
+    // 光线和场景的交点
+    Intersection t = intersect(obj2lightray);
+    // 光线中间没有碰到其他物体，即两向量长度相同
+    if(t.distance - obj2light.norm() > -EPSILON) {
+        // L_i * f_r * cos_theta * cos_theta_x / |x-p|^2 / pdf_light
+        // emit * eval(wo,ws,N) * dot(ws,N) * dot(ws,NN) / |x-p|^2 / pdf_light
+        // eval即物体的BRDF
+        ldir = lightInter.emit * objectInter.m->eval(ray.direction, obj2lightdir, objectInter.normal) * dotProduct(obj2lightdir, objectInter.normal) * dotProduct(-obj2lightdir, lightInter.normal) / distancePow2 / lightPdf;
+    }
+	
+    // 产生随机数，大于概率就直接返回，不再弹射光线
+    if(get_random_float() > RussianRoulette) return ldir;
+
+	// 从一个物体反射到另一个物体，在像素中直接采样多次，N=1，而不是一个点多次采样光线
+    Vector3f obj2nextobjdir = objectInter.m->sample(ray.direction, objectInter.normal).normalized();
+    Ray obj2nextobjray = {objectInter.coords, obj2nextobjdir};
+
+    // 反射光线和物体求交
+    Intersection nextObjInter = intersect(obj2nextobjray);
+    // 相交且无自发光
+    if(nextObjInter.happened && !nextObjInter.m->hasEmission()) {
+
+        // 生成PDF
+        float pdf = objectInter.m->pdf(ray.direction, obj2nextobjdir, objectInter.normal);
+        // 递归求弹射光线
+        lindir = castRay(obj2nextobjray, depth + 1) * objectInter.m->eval(ray.direction, obj2nextobjdir, objectInter.normal) * dotProduct(obj2nextobjdir, objectInter.normal) / pdf / RussianRoulette;
+    }
+
+    return ldir + lindir;
+}
+```
+
+`Epsilon` in Scene.cpp，等于0.00001，SPP=16，渲染结果如下，有噪点和黑色横纹。
+
+![binary](record.assets/binary-1612257783303.png)
+
+修改`Epsilon=0.01`，SPP=16横纹消失，噪点还是很多。
+
+![binary](record.assets/binary-1612258726087.png)
+
+SPP=32，好了一写，但还是很多。
+
+![binary~1](record.assets/binary1.png)
+
+设置SPP=200后的效果，图片来自网络，自行渲染太慢了：
+
+![image-20210202183436226](record.assets/image-20210202183436226.png)
